@@ -480,7 +480,7 @@ def main():
     val_scores = scores_list[train_len:]
 
     test_queries = test_df.select("query").to_series().to_list()
-    test_scores = test_df.select("query").to_series().to_list()
+    test_scores = test_df.select("score").to_series().to_list()
 
     print("Starting Bayesian Hyperparameter Optimization")
 
