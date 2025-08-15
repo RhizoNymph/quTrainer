@@ -2,6 +2,7 @@ import polars as pl
 import numpy as np
 import json
 import logging
+import os
 import matplotlib.pyplot as plt
 
 import torch
@@ -451,6 +452,9 @@ def train_with_best_hyperparameters(
         verbose=True,
         early_stopping_patience=3
     )
+
+    if save_path:
+        torch.save(model.state_dict(), save_path)
     
     return model, val_loss
 
@@ -480,20 +484,21 @@ def main():
 
     print("Starting Bayesian Hyperparameter Optimization")
 
-    optimizer = BayesianOptimizer(
-        train_queries=train_queries,
-        train_scores=train_scores,
-        val_queries=val_queries,
-        val_scores=val_scores,
-        tokenizer=tokenizer,
-        device=device,
-        n_trials=20
-    )
+    if not os.path.exists('optimization_history.json'):
+        optimizer = BayesianOptimizer(
+            train_queries=train_queries,
+            train_scores=train_scores,
+            val_queries=val_queries,
+            val_scores=val_scores,
+            tokenizer=tokenizer,
+            device=device,
+            n_trials=20
+        )
 
-    optimization_history = optimizer.optimize()
+        optimization_history = optimizer.optimize()
 
-    with open('optimization_history.json', 'w') as f:
-        json.dump(optimization_history, f, indent=2)
+        with open('optimization_history.json', 'w') as f:
+            json.dump(optimization_history, f, indent=2)
 
     final_model, final_val_loss = train_with_best_hyperparameters(
         train_queries=train_queries,
