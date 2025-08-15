@@ -504,8 +504,8 @@ def main():
             optimization_history = json.load(f)
 
     final_model, final_val_loss = train_with_best_hyperparameters(
-        train_queries=train_queries,
-        train_scores=train_scores,
+        train_queries=train_queries + val_queries,
+        train_scores=train_scores + val_scores,
         val_queries=test_queries,
         val_scores=test_scores,
         best_params=optimization_history['best_params'],
