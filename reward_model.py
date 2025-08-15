@@ -499,6 +499,9 @@ def main():
 
         with open('optimization_history.json', 'w') as f:
             json.dump(optimization_history, f, indent=2)
+    else:
+        with open('optimization_history.json', 'r') as f:
+            optimization_history = json.load(f)
 
     final_model, final_val_loss = train_with_best_hyperparameters(
         train_queries=train_queries,
