@@ -258,7 +258,8 @@ class BayesianOptimizer:
         tokenizer,
         device: torch.device,
         n_trials: int = 20,
-        timeout: int | None = None
+        timeout: int | None = None,
+        model_id: str = "answerdotai/ModernBERT-base"
     ):
         self.train_queries = train_queries
         self.train_scores = train_scores
@@ -268,6 +269,7 @@ class BayesianOptimizer:
         self.device = {'device': device}
         self.n_trials = n_trials
         self.timeout = timeout
+        self.model_id = model_id
 
     def objective(self, trial: Trial) -> float:
         hp_dict = {
@@ -354,7 +356,7 @@ class BayesianOptimizer:
         study = optuna.create_study(
             direction='minimize',
             sampler=sampler,
-            study_name='modernbert-base_quRewardModel'
+            study_name=f'{self.model_id}_quRewardModel'
         )
 
         study.optimize(
@@ -394,11 +396,12 @@ def train_with_best_hyperparameters(
     val_scores: list[float],
     best_params: Dict[str, Any],
     device: torch.device,
-    save_path: str = 'best_modernbert_quRewardModel.pt'
+    model_id='answerdotai/ModernBERT-base',
+    save_path: str = 'best_quRewardModel.pt'
 ):
     logger.info("Training final model with best hyperparameters...")
     
-    tokenizer = AutoTokenizer.from_pretrained('answerdotai/ModernBERT-base')
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
     
     hidden_dims = []
     base_dim = 768
@@ -454,15 +457,17 @@ def train_with_best_hyperparameters(
     )
 
     if save_path:
-        torch.save(model.state_dict(), save_path)
+        model_dir = f'models/{model_id.replace("/", "_")}'
+        os.makedirs(model_dir, exist_ok=True)
+        torch.save(model.state_dict(), f'{model_dir}/{save_path}')
     
     return model, val_loss
 
-def main():
+def main(model_id="answerdotai/ModernBERT-base"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_float32_matmul_precision('high')
     
-    tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     # dev_df = pl.read_csv("./data/query-wellformedness/dev.tsv", separator='\t', has_header=False, new_columns=["query", "score"])
     train_df = pl.read_csv("./data/query-wellformedness/train.tsv", separator='\t', has_header=False, new_columns=["query", "score"])
@@ -484,7 +489,7 @@ def main():
 
     print("Starting Bayesian Hyperparameter Optimization")
 
-    if not os.path.exists('optimization_history.json'):
+    if not os.path.exists(f'results/{model_id.replace("/", "_")}/optimization_history.json'):
         optimizer = BayesianOptimizer(
             train_queries=train_queries,
             train_scores=train_scores,
@@ -492,15 +497,18 @@ def main():
             val_scores=val_scores,
             tokenizer=tokenizer,
             device=device,
-            n_trials=20
+            n_trials=20,
+            model_id=model_id
         )
 
         optimization_history = optimizer.optimize()
 
-        with open('optimization_history.json', 'w') as f:
+        
+        os.makedirs(f'results/{model_id.replace("/", "_")}', exist_ok=True)
+        with open(f'results/{model_id.replace("/", "_")}/optimization_history.json', 'w') as f:
             json.dump(optimization_history, f, indent=2)
     else:
-        with open('optimization_history.json', 'r') as f:
+        with open(f'results/{model_id.replace("/", "_")}/optimization_history.json', 'r') as f:
             optimization_history = json.load(f)
 
     final_model, final_val_loss = train_with_best_hyperparameters(
@@ -510,10 +518,11 @@ def main():
         val_scores=test_scores,
         best_params=optimization_history['best_params'],
         device=device,
+        model_id=model_id
     )
     
     print(f'\nFinal validation loss: {final_val_loss:.4f}')
-    print('\nOptimization complete! Best hyperparameters saved to optimization_history.json')
+    print(f'\nOptimization complete! Best hyperparameters saved to results/{model_id.replace("/", "_")}/optimization_history.json')
     
     final_model.eval()
     test_query = "How does neural network training work?"
@@ -532,8 +541,8 @@ def main():
         print(f'\nTest query: "{test_query}"')
         print(f'Predicted score: {score.item():.4f}')
 
-def analyze_optimization_results(history_path: str = 'optimization_history.json'):
-    with open(history_path, 'r') as f:
+def analyze_optimization_results(model_id: str):
+    with open(f'results/{model_id.replace("/", "_")}/optimization_history.json', 'r') as f:
         history = json.load(f)
     
     trials = history['optimization_history']
@@ -559,7 +568,7 @@ def analyze_optimization_results(history_path: str = 'optimization_history.json'
     plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('optimization_results.png', dpi=150, bbox_inches='tight')
+    plt.savefig(f'results/{model_id.replace("/", "_")}/optimization_results.png', dpi=150, bbox_inches='tight')
     plt.show()
     
     print("\nParameter Analysis:")
@@ -583,5 +592,6 @@ def analyze_optimization_results(history_path: str = 'optimization_history.json'
         print(f"{param}: {value}")
 
 if __name__ == '__main__':
-    main()
-    analyze_optimization_results()
+    model_id = "answerdotai/ModernBERT-large"
+    main(model_id)
+    analyze_optimization_results(model_id)
